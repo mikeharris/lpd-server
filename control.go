@@ -37,4 +37,3 @@ func (c *ControlFile) unmarshal(controlFile io.Reader) {
 		}
 	}
 }
-

@@ -6,9 +6,12 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
-	"strconv"
 )
+
+type PrintJob struct {
+	Payload     *Payload
+	ControlFile *ControlFile
+}
 
 const (
 	ACK = 0x00
@@ -20,23 +23,22 @@ const (
 	STATE_RECEIVE_CONTROL
 )
 
-func HandleLpd(c net.Conn, filePrefix string, out chan<- string) {
+func HandlePrintJob(c net.Conn, filePrefix string, out chan<- string) {
 	log.Println("NEW LPD CONNECTION FROM ", c.RemoteAddr().String())
 	state := STATE_IDLE
 	defer c.Close()
 	var printFilename string
-	var cf *ControlFile = new(ControlFile)
-	//var printFileUri string
+	var job *PrintJob = new(PrintJob)
 
 	for {
 		var com = new(Command)
 		switch state {
 		case STATE_RECEIVE_DATA:
-			payload, err := readPayload(c)
+			err := job.Payload.unmarshal(c)
 			if err != nil {
 				log.Println("FAILED TO FETCH PRINT PAYLOAD: ", err)
 			}
-			err = os.WriteFile(printFilename, payload, 0644)
+			// err = os.WriteFile(printFilename, payload, 0644)
 			if err != nil {
 				log.Println("FAILED TO PERSIST PRINT FILE: ", err)
 			}
@@ -46,8 +48,8 @@ func HandleLpd(c net.Conn, filePrefix string, out chan<- string) {
 			if err != nil {
 				log.Println("FAILED TO READ CONTROL FILE: ", err)
 			}
-			cf.unmarshal(bytes.NewReader(data))
-			log.Printf("CONTROL FILE CONTENT: %+v \n", cf)
+			job.ControlFile.unmarshal(bytes.NewReader(data))
+			log.Printf("CONTROL FILE CONTENT: %+v \n", job.ControlFile)
 			state = STATE_RECEIVE_JOB
 		case STATE_RECEIVE_JOB:
 			line, err := bufio.NewReader(c).ReadBytes(LF)
@@ -67,10 +69,9 @@ func HandleLpd(c net.Conn, filePrefix string, out chan<- string) {
 				state = STATE_RECEIVE_CONTROL
 			case JOB_RECEIVE_DATA:
 				log.Println("RECEIVING DATA FILE")
-				// Remove trailing LF
-				printFilename = filePrefix + "-" + com.Operands[1] + ".ps"
 				log.Println("FILENAME: ", printFilename)
-				log.Println("FILESIZE (KB): ", getFilesizeInKB(com.Operands[0]))
+				log.Println("FILESIZE (bytes): ", com.Operands[0])
+				job.Payload.Filename = filePrefix + "-" + com.Operands[1] + ".ps"
 				state = STATE_RECEIVE_DATA
 			case JOB_ABORT:
 				log.Println("ABORTING JOB")
@@ -113,20 +114,3 @@ func HandleLpd(c net.Conn, filePrefix string, out chan<- string) {
 
 	}
 }
-
-func getFilesizeInKB(bytes string) float64 {
-	i, err := strconv.Atoi(bytes)
-	if err != nil {
-		i = 0
-	}
-	return float64(i) / 1000.0
-}
-
-func readPayload(reader io.Reader) (payload []byte, err error) {
-	payload, err = bufio.NewReader(reader).ReadBytes(ACK)
-	if err != nil {
-		log.Println("ERROR READING PRINT PAYLOAD: ", err)
-	}
-	return
-}
-
