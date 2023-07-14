@@ -23,7 +23,7 @@ const (
 	STATE_RECEIVE_CONTROL
 )
 
-func HandleConnection(c net.Conn, filePrefix string, out chan<- PrintJob) {
+func HandleConnection(c net.Conn, out chan<- PrintJob) {
 	slog.Debug("NEW LPD CONNECTION", "remoteAddress", c.RemoteAddr().String())
 	state := STATE_IDLE
 	defer c.Close()
@@ -62,7 +62,7 @@ func HandleConnection(c net.Conn, filePrefix string, out chan<- PrintJob) {
 				slog.Debug("RECEIVING CONTROL FILE")
 				state = STATE_RECEIVE_CONTROL
 			case JOB_RECEIVE_DATA:
-				job.Payload.Filename = filePrefix + "-" + com.Operands[1] + ".ps"
+				job.Payload.Filename = com.Operands[1]
 				slog.Debug("RECEIVING DATA FILE", "filename", job.Payload.Filename, "filesize", com.Operands[0])
 				state = STATE_RECEIVE_DATA
 			case JOB_ABORT:
